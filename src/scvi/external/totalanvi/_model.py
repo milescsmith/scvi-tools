@@ -15,11 +15,10 @@ from scvi.utils._docstrings import setup_anndata_dsp
 
 from ._module import TOTALANVAE
 
-if TYPE_CHECKING:
-    from typing import Literal
+from typing import Literal
 
-    from anndata import AnnData
-    from mudata import MuData
+from anndata import AnnData
+from mudata import MuData
 
 logger = logging.getLogger(__name__)
 
@@ -222,10 +221,12 @@ class TOTALANVI(SemisupervisedTrainingMixin, TOTALVI):
         adata
             AnnData object that has been registered via
             :meth:`~scvi.external.TOTALANVI.setup_anndata`.
+        registry
+            Registry of the datamodule used to train ANVI model.
         totalanvi_kwargs
             kwargs for totalANVI model
         """
-        totalvi_model._check_if_trained(message="Passed in scvi model hasn't been trained yet.")
+        totalvi_model._check_if_trained(message="Passed in totalvi model hasn't been trained yet.")
 
         totalanvi_kwargs = dict(totalanvi_kwargs)
         init_params = totalvi_model.init_params_
@@ -235,8 +236,10 @@ class TOTALANVI(SemisupervisedTrainingMixin, TOTALVI):
         for k, v in {**non_kwargs, **kwargs}.items():
             if k in totalanvi_kwargs.keys():
                 warnings.warn(
-                    f"Ignoring param '{k}' as it was already passed in to pretrained "
-                    f"SCVI model with value {v}.",
+                        (
+                        f"Ignoring param '{k}' as it was already passed in to pretrained " \
+                            f"TOTALVI model with value {v}."
+                        ),
                     UserWarning,
                     stacklevel=settings.warnings_stacklevel,
                 )
@@ -253,11 +256,18 @@ class TOTALANVI(SemisupervisedTrainingMixin, TOTALVI):
                 "A `labels_key` is necessary as the TOTALVI model was initialized without one."
             )
         totalvi_setup_args.update({"labels_key": labels_key})
-        cls.setup_anndata(
-            adata,
-            unlabeled_category=unlabeled_category,
-            **totalvi_setup_args,
-        )
+        if isinstance(adata, AnnData):
+            cls.setup_anndata(
+                adata,
+                unlabeled_category=unlabeled_category,
+                **totalvi_setup_args,
+            )
+        elif isinstance(adata, MuData):
+            cls.setup_mudata(
+                adata, 
+                unlabeled_category=unlabeled_category,
+                **totalvi_setup_args,
+            )
         totalanvi_model = cls(adata, **non_kwargs, **kwargs, **totalanvi_kwargs)
         totalvi_state_dict = totalvi_model.module.state_dict()
         totalanvi_model.module.load_state_dict(totalvi_state_dict, strict=False)
@@ -361,6 +371,8 @@ class TOTALANVI(SemisupervisedTrainingMixin, TOTALVI):
         categorical_covariate_keys: list[str] | None = None,
         continuous_covariate_keys: list[str] | None = None,
         modalities: dict[str, str] | None = None,
+        labels_key: str | None = None,
+        unlabeled_category: str | None = None,
         **kwargs,
     ):
         """%(summary_mdata)s.
@@ -448,6 +460,11 @@ class TOTALANVI(SemisupervisedTrainingMixin, TOTALVI):
                 batch_field=batch_field,
                 is_count_data=True,
                 mod_required=True,
+            ),
+            fields.MuDataLabelsWithUnlabeledObsField(
+                REGISTRY_KEYS.LABELS_KEY,
+                obs_key=labels_key,
+                unlabeled_category=unlabeled_category
             ),
         ]
 
